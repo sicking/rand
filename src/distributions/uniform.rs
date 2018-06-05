@@ -244,11 +244,83 @@ impl<X: SampleUniform> From<::core::ops::Range<X>> for Uniform<X> {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-
 // What follows are all back-ends.
 
+#[doc(hidden)]
+pub trait SmallInt {
+    type UnsignedGenerableLargerInt;
+}
 
-/// The back-end implementing [`UniformSampler`] for integer types.
+/// The back-end implementing [`UniformSampler`] for "small" integer types. In
+/// this case "small" refers to types smaller than u64.
+///
+/// Unless you are implementing [`UniformSampler`] for your own type, this type
+/// should not be used directly, use [`Uniform`] instead.
+#[derive(Clone, Copy, Debug)]
+pub struct UniformSmallInt<X: SmallInt> {
+    low: X,
+    range: X::UnsignedGenerableLargerInt,
+}
+
+macro_rules! uniform_small_int_impl {
+    ($ty:ty, $unsigned:ty, $u_large:ty) => {
+        impl SampleUniform for $ty {
+            type Sampler = UniformSmallInt<$ty>;
+        }
+
+        impl SmallInt for $ty {
+            type UnsignedGenerableLargerInt = $u_large;
+        }
+
+        impl UniformSampler for UniformSmallInt<$ty> {
+            type X = $ty;
+
+            #[inline] // if the range is constant, this helps LLVM to do the
+                      // calculations at compile-time.
+            fn new(low: Self::X, high: Self::X) -> Self {
+                assert!(low < high, "Uniform::new called with `low >= high`");
+                UniformSampler::new_inclusive(low, high - 1)
+            }
+
+            #[inline] // if the range is constant, this helps LLVM to do the
+                      // calculations at compile-time.
+            fn new_inclusive(low: Self::X, high: Self::X) -> Self {
+                assert!(low <= high,
+                        "Uniform::new_inclusive called with `low > high`");
+                let range = (high.wrapping_sub(low) as $unsigned as $u_large) + 1;
+
+                UniformSmallInt {
+                    low: low,
+                    range: range,
+                }
+            }
+
+            #[inline]
+            fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Self::X {
+                let v: $u_large = rng.gen();
+                self.low.wrapping_add(v.wmul(self.range).0 as $ty)
+            }
+
+            #[inline]
+            fn sample_single<R: Rng + ?Sized>(low: Self::X,
+                                              high: Self::X,
+                                              rng: &mut R) -> Self::X
+            {
+                assert!(low < high,
+                        "Uniform::sample_single called with low >= high");
+                let range = high.wrapping_sub(low) as $unsigned as $u_large;
+
+                let v: $u_large = rng.gen();
+                low.wrapping_add(v.wmul(range).0 as $ty)
+            }
+        }
+    }
+}
+
+
+/// The back-end implementing [`UniformSampler`] for "big" integer types. In
+/// this case "big" refers to types u64 and bigger. Since for those types we
+/// can't quickly generate a bigger integer and do math on it.
 ///
 /// Unless you are implementing [`UniformSampler`] for your own type, this type
 /// should not be used directly, use [`Uniform`] instead.
@@ -394,21 +466,21 @@ macro_rules! uniform_int_impl {
     }
 }
 
-uniform_int_impl! { i8, i8, u8, i32, u32 }
-uniform_int_impl! { i16, i16, u16, i32, u32 }
+uniform_small_int_impl! { i8, u8, u32 }
+uniform_small_int_impl! { i16, u16, u32 }
+uniform_small_int_impl! { u8, u8, u32 }
+uniform_small_int_impl! { u16, u16, u64 }
+
 uniform_int_impl! { i32, i32, u32, i32, u32 }
 uniform_int_impl! { i64, i64, u64, i64, u64 }
 #[cfg(feature = "i128_support")]
 uniform_int_impl! { i128, i128, u128, u128, u128 }
 uniform_int_impl! { isize, isize, usize, isize, usize }
-uniform_int_impl! { u8, i8, u8, i32, u32 }
-uniform_int_impl! { u16, i16, u16, i32, u32 }
 uniform_int_impl! { u32, i32, u32, i32, u32 }
 uniform_int_impl! { u64, i64, u64, i64, u64 }
 uniform_int_impl! { usize, isize, usize, isize, usize }
 #[cfg(feature = "i128_support")]
 uniform_int_impl! { u128, u128, u128, i128, u128 }
-
 
 trait WideningMultiply<RHS = Self> {
     type Output;
