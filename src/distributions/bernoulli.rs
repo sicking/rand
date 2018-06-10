@@ -65,25 +65,23 @@ const SCALE: f64 = 2.0 * (1u64 << 63) as f64;
 impl Bernoulli {
     /// Construct a new `Bernoulli` with the given probability of success `p`.
     ///
-    /// # Panics
-    ///
-    /// If `p < 0` or `p > 1`.
+    /// For `p >= 1.0`, the resulting distribution will always generate true.
+    /// For `p <= 0.0`, the resulting distribution will always generate false.
     ///
     /// # Precision
-    ///
-    /// For `p = 1.0`, the resulting distribution will always generate true.
-    /// For `p = 0.0`, the resulting distribution will always generate false.
     ///
     /// This method is accurate for any input `p` in the range `[0, 1]` which is
     /// a multiple of 2<sup>-64</sup>. (Note that not all multiples of
     /// 2<sup>-64</sup> in `[0, 1]` can be represented as a `f64`.)
     #[inline]
     pub fn new(p: f64) -> Bernoulli {
-        if p < 0.0 || p >= 1.0 {
-            if p == 1.0 { return Bernoulli { p_int: ALWAYS_TRUE } }
-            panic!("Bernoulli::new not called with 0.0 <= p <= 1.0");
+        if p < 0.0 {
+            Bernoulli { p_int: 0 }
+        } else if p >= 1.0 {
+            Bernoulli { p_int: ALWAYS_TRUE }
+        } else {
+            Bernoulli { p_int: (p * SCALE) as u64 }
         }
-        Bernoulli { p_int: (p * SCALE) as u64 }
     }
 
     /// Construct a new `Bernoulli` with the probability of success of
@@ -99,7 +97,8 @@ impl Bernoulli {
     ///
     #[inline]
     pub fn from_ratio(numerator: u32, denominator: u32) -> Bernoulli {
-        assert!(numerator <= denominator);
+        assert!(numerator <= denominator, "Bernoulli::from_ratio called with numerator > denominator");
+        assert!(denominator > 0, "Bernoulli::from_ratio called with denominator == 0");
         if numerator == denominator {
             return Bernoulli { p_int: ::core::u64::MAX }
         }
@@ -122,18 +121,31 @@ impl Distribution<bool> for Bernoulli {
 mod test {
     use Rng;
     use distributions::Distribution;
+    #[cfg(feature="std")] use std::panic::catch_unwind;
     use super::Bernoulli;
 
     #[test]
     fn test_trivial() {
         let mut r = ::test::rng(1);
-        let always_false = Bernoulli::new(0.0);
-        let always_true = Bernoulli::new(1.0);
+        let always_false1 = Bernoulli::new(0.0);
+        let always_true1 = Bernoulli::new(1.0);
+        let always_false2 = Bernoulli::new(-1.2);
+        let always_true2 = Bernoulli::new(1.1);
+        let always_false3 = Bernoulli::from_ratio(0, 5);
+        let always_true3 = Bernoulli::from_ratio(3, 3);
         for _ in 0..5 {
-            assert_eq!(r.sample::<bool, _>(&always_false), false);
-            assert_eq!(r.sample::<bool, _>(&always_true), true);
-            assert_eq!(Distribution::<bool>::sample(&always_false, &mut r), false);
-            assert_eq!(Distribution::<bool>::sample(&always_true, &mut r), true);
+            assert_eq!(r.sample(&always_false1), false);
+            assert_eq!(r.sample(&always_true1), true);
+            assert_eq!(always_false1.sample(&mut r), false);
+            assert_eq!(always_true1.sample(&mut r), true);
+            assert_eq!(r.sample(&always_false2), false);
+            assert_eq!(r.sample(&always_true2), true);
+            assert_eq!(always_false2.sample(&mut r), false);
+            assert_eq!(always_true2.sample(&mut r), true);
+            assert_eq!(r.sample(&always_false3), false);
+            assert_eq!(r.sample(&always_true3), true);
+            assert_eq!(always_false3.sample(&mut r), false);
+            assert_eq!(always_true3.sample(&mut r), true);
         }
     }
 
@@ -162,5 +174,16 @@ mod test {
 
         let avg2 = (sum2 as f64) / (N as f64);
         assert!((avg2 - (NUM as f64)/(DENOM as f64)).abs() < 5e-3);
+    }
+
+
+    #[test]
+    #[cfg(all(feature="std",
+              not(target_arch = "wasm32"),
+              not(target_arch = "asmjs")))]
+    fn test_assertions() {
+        assert!(catch_unwind(|| Bernoulli::from_ratio(5, 2)).is_err());
+        assert!(catch_unwind(|| Bernoulli::from_ratio(5, 0)).is_err());
+        assert!(catch_unwind(|| Bernoulli::from_ratio(0, 0)).is_err());
     }
 }

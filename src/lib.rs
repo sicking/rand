@@ -575,7 +575,9 @@ pub trait Rng: RngCore {
         Ok(())
     }
 
-    /// Return a bool with a probability `p` of being true.
+    /// Return a bool with a probability `p` of being true. If `p <= 0`
+    /// then false is always returned. If `p >= 1`, then true is always
+    /// returned.
     ///
     /// See also the [`Bernoulli`] distribution, which may be faster if
     /// sampling from the same probability repeatedly.
@@ -588,10 +590,6 @@ pub trait Rng: RngCore {
     /// let mut rng = thread_rng();
     /// println!("{}", rng.gen_bool(1.0 / 3.0));
     /// ```
-    ///
-    /// # Panics
-    ///
-    /// If `p < 0` or `p > 1`.
     ///
     /// [`Bernoulli`]: distributions/bernoulli/struct.Bernoulli.html
     #[inline]
@@ -1063,6 +1061,8 @@ mod test {
         for _ in 0..5 {
             assert_eq!(r.gen_bool(0.0), false);
             assert_eq!(r.gen_bool(1.0), true);
+            assert_eq!(r.gen_bool(-0.1), false);
+            assert_eq!(r.gen_bool(1.001), true);
         }
     }
 
