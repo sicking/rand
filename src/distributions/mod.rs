@@ -277,6 +277,22 @@ impl<'a, T, D: Distribution<T>> Distribution<T> for &'a D {
     }
 }
 
+/// Trait which make it easier to disambiguate sample type when sampling
+/// from a type which implements Distribution<T> for multiple different
+/// types T.
+pub trait DistributionAs {
+    /// same as `Distribution::sample`, but allows specifying
+    /// a sample type as a parameter on 
+    fn sample_as<T, R: Rng + ?Sized>(&self, rng: &mut R) -> T
+        where Self: Distribution<T>;
+}
+
+impl<D> DistributionAs for D {
+    fn sample_as<T, R: Rng + ?Sized>(&self, rng: &mut R) -> T
+        where Self: Distribution<T> {
+        self.sample(rng)
+    }
+}
 
 /// An iterator that generates random values of `T` with distribution `D`,
 /// using `R` as the source of randomness.

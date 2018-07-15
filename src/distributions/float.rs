@@ -171,7 +171,7 @@ float_impls! { f64x8, u64x8, f64, u64, 52, 1023 }
 #[cfg(test)]
 mod tests {
     use Rng;
-    use distributions::{Distribution, Open01, OpenClosed01};
+    use distributions::{DistributionAs, Open01, OpenClosed01};
     use rngs::mock::StepRng;
     #[cfg(feature="simd_support")]
     use core::simd::*;
@@ -193,24 +193,24 @@ mod tests {
 
                 // OpenClosed01
                 let mut zeros = StepRng::new(0, 0);
-                assert_eq!(Distribution::<$ty>::sample(&OpenClosed01, &mut zeros),
+                assert_eq!(OpenClosed01.sample_as::<$ty, _>(&mut zeros),
                            (0.0 + $EPSILON / 2.0) as $ty);
                 let mut one = StepRng::new($ONE_BITS, 0);
-                assert_eq!(Distribution::<$ty>::sample(&OpenClosed01, &mut one),
+                assert_eq!(OpenClosed01.sample_as::<$ty, _>(&mut one),
                            $EPSILON);
                 let mut max = StepRng::new(!0, 0);
-                assert_eq!(Distribution::<$ty>::sample(&OpenClosed01, &mut max),
+                assert_eq!(OpenClosed01.sample_as::<$ty, _>(&mut max),
                            $ZERO + 1.0);
 
                 // Open01
                 let mut zeros = StepRng::new(0, 0);
-                assert_eq!(Distribution::<$ty>::sample(&Open01, &mut zeros),
+                assert_eq!(Open01.sample_as::<$ty, _>(&mut zeros),
                            0.0 + $EPSILON / 2.0);
                 let mut one = StepRng::new($ONE_BITS << 1, 0);
-                assert_eq!(Distribution::<$ty>::sample(&Open01, &mut one),
+                assert_eq!(Open01.sample_as::<$ty, _>(&mut one),
                            $EPSILON / 2.0 * 3.0);
                 let mut max = StepRng::new(!0, 0);
-                assert_eq!(Distribution::<$ty>::sample(&Open01, &mut max),
+                assert_eq!(Open01.sample_as::<$ty, _>(&mut max),
                            1.0 - $EPSILON / 2.0);
             }
         }
